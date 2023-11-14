@@ -225,37 +225,183 @@ rows,cols = resized_image.shape[:2]
 # # cv_show(thresh)
 # # cv_show(combined_image)
 
-template = cv.imread('assets/roi.jpg',0)
-
-gray = cv.cvtColor(resized_image,cv.COLOR_BGR2GRAY)
-
-gray2 = gray.copy()
-
-w, h = template.shape[::-1]
 
 
-methods = ['cv.TM_CCOEFF', 'cv.TM_CCOEFF_NORMED', 'cv.TM_CCORR',
-            'cv.TM_CCORR_NORMED', 'cv.TM_SQDIFF', 'cv.TM_SQDIFF_NORMED']
+# #模板匹配
+# template = cv.imread('assets/roi.jpg',0)
+#
+# gray = cv.cvtColor(resized_image,cv.COLOR_BGR2GRAY)
+#
+# gray2 = gray.copy()
+#
+# w, h = template.shape[::-1]
+#
+#
+# methods = ['cv.TM_CCOEFF', 'cv.TM_CCOEFF_NORMED', 'cv.TM_CCORR',
+#             'cv.TM_CCORR_NORMED', 'cv.TM_SQDIFF', 'cv.TM_SQDIFF_NORMED']
+#
+# for meth in methods:
+#     gray = gray2.copy()
+#     #使用eval()函数将方法名称字符串转换为对应的OpenCV常量，
+#     # 并将结果存储在method变量中，以便在后续的模板匹配步骤中使用。
+#     method = eval(meth)
+# #     # 应用模板匹配
+#     res = cv.matchTemplate(gray,template,method)
+#     print(res)
+#     min_val, max_val, min_loc, max_loc = cv.minMaxLoc(res)
+# #     # 如果方法是TM_SQDIFF或TM_SQDIFF_NORMED，则取最小值
+#     if method in [cv.TM_SQDIFF, cv.TM_SQDIFF_NORMED]:
+#         top_left = min_loc
+#     else:
+#         top_left = max_loc
+#     # 这行代码使用top_left和bottom_right坐标定义一个矩形区域，然后使用cv.rectangle()
+#     # 函数在图像img上绘制该矩形框。矩形框的颜色为255（白色），线宽为2。
+#     bottom_right = (top_left[0] + w, top_left[1] + h)
+#     cv.rectangle(gray,top_left, bottom_right, (0, 255, 0), 2)
+#
+#     cv_show(gray)
+#
+# # cv_show(gray)
 
-for meth in methods:
-    gray = gray2.copy()
-    #使用eval()函数将方法名称字符串转换为对应的OpenCV常量，
-    # 并将结果存储在method变量中，以便在后续的模板匹配步骤中使用。
-    method = eval(meth)
-#     # 应用模板匹配
-    res = cv.matchTemplate(gray,template,method)
-    min_val, max_val, min_loc, max_loc = cv.minMaxLoc(res)
-#     # 如果方法是TM_SQDIFF或TM_SQDIFF_NORMED，则取最小值
-    if method in [cv.TM_SQDIFF, cv.TM_SQDIFF_NORMED]:
-        top_left = min_loc
-    else:
-        top_left = max_loc
-    # 这行代码使用top_left和bottom_right坐标定义一个矩形区域，然后使用cv.rectangle()
-    # 函数在图像img上绘制该矩形框。矩形框的颜色为255（白色），线宽为2。
-    bottom_right = (top_left[0] + w, top_left[1] + h)
-    cv.rectangle(gray,top_left, bottom_right, (0, 255, 0), 2)
 
-    cv_show(gray)
+#
+#实战example
+from imutils import contours
+import imutils
 
-# cv_show(gray)
+
+img_ref  = cv.imread('assets/model.png')
+
+img_ref_gray = cv2.cvtColor(img_ref , cv2.COLOR_BGR2GRAY)
+_,img_ref_gray = cv2.threshold(img_ref_gray, 10, 255, cv2.THRESH_BINARY_INV)
+
+
+imgCnts = cv2.findContours(img_ref_gray.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+imgCnts = imutils.grab_contours(imgCnts)
+imgCnts = imutils.contours.sort_contours(imgCnts, method="left-to-right")[0]
+digits = {}
+
+# cv.drawContours(img_ref, imgCnts, -1, (0,255,0), 2)
+
+
+# 轮廓处理
+for (i, c) in enumerate(imgCnts):
+    (x,y,w,h) = cv2.boundingRect(c)
+    roi = img_ref_gray[y:y+h, x:x+w]
+    # cv_show(img_ref[y:y + h, x:x + w])
+    roi = cv2.resize(roi, (57,88))
+    #更新字典
+    digits[i] = roi
+
+
+ #核函数构建
+rectKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9,3))
+rectKernel5 = cv2.getStructuringElement(cv2.MORPH_RECT, (5,5))
+
+img = cv2.imread('assets/test3.png')
+img = imutils.resize(img, width=300)
+img_resized = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+# 礼貌运算突出较亮的区域
+tophat_img = cv2.morphologyEx(img_resized, cv2.MORPH_TOPHAT, rectKernel)
+
+_,tophat_img = cv2.threshold(tophat_img, 50, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+
+gradX = cv2.Sobel(tophat_img, ddepth=cv2.CV_32F, dx=1, dy=0, ksize=-1)
+gradY = cv2.Sobel(tophat_img, ddepth=cv2.CV_32F, dx=0, dy=1, ksize=-1)
+
+sobelx_abs = np.abs(gradX)
+sobely_abs = np.abs(gradY)
+#
+# # 将绝对值转换回cv.CV_8U类型
+sobelx_abs_uint8 = cv.convertScaleAbs(sobelx_abs)
+sobely_abs_uint8 = cv.convertScaleAbs(sobely_abs)
+
+sobel_combined = cv.addWeighted(sobelx_abs_uint8, 0.5, sobely_abs_uint8, 0.5, 0)
+
+
+sobel_combined = cv2.morphologyEx(sobel_combined, cv2.MORPH_CLOSE, rectKernel)
+
+
+_,sobel_combined = cv2.threshold(sobel_combined, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+
+
+_,thresh = cv2.threshold(sobel_combined, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)
+
+
+thresh = cv.morphologyEx(thresh, cv.MORPH_OPEN, rectKernel,iterations=1)
+
+
+thresh = cv.morphologyEx(thresh, cv.MORPH_OPEN, rectKernel5)
+
+cnts,_ = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+# cv.drawContours(img, cnts, -1, (0,255,0), 2)
+
+locs = []
+
+#筛选一下轮廓
+for (i, c) in enumerate(cnts):
+    (x, y, w, h) = cv2.boundingRect(c)
+    ratio = w/float(h)
+
+    if ratio>2.5 and ratio < 4.0:
+        if(w>40 and w<55) and (h>10 and h<20):
+            locs.append((x,y,w,h))
+
+
+locs = sorted(locs,key=lambda x:x[0])
+
+for (i, (gX, gY, gW, gH)) in enumerate(locs):
+    groupOutput = []
+
+    group_color = img[gY -2 :gY +gH +2, gX -2:gX+gW +2]
+    group = img_resized[gY -2 :gY +gH +2, gX -2:gX+gW +2]
+    group = cv2.threshold(group, 0, 255, cv2.THRESH_BINARY|cv2.THRESH_OTSU)[1]
+
+    # cv_show(group)
+
+    # #轮廓查找,排序
+
+    digitCnts,_ = cv2.findContours(group.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    digitCnts = contours.sort_contours(digitCnts, method="left-to-right")[0]
+
+    cv.drawContours(group_color, digitCnts, -1, (0,255,0), 1)
+
+    num_contours = len(digitCnts)
+    print("找到的轮廓数量：", num_contours)
+
+    # cv_show(group_color)
+
+    for c in digitCnts:
+        (x, y, w, h) = cv2.boundingRect(c)
+        roi = group[y:y + h, x:x + w]
+
+        roi = cv2.resize(roi, (57, 88))
+
+        # cv_show(roi)
+
+        scores = []
+        #模板匹配
+        for (digit, digitROI) in digits.items():
+
+            result = cv2.matchTemplate(roi, digitROI, cv2.TM_CCOEFF)
+
+            (_, score, _, _) = cv2.minMaxLoc(result)
+            scores.append(score)
+            # print(scores)
+
+        groupOutput.append(str(np.argmax(scores)))
+
+        # print(groupOutput)
+
+    cv2.rectangle(img, (gX - 5, gY - 5), (gX + gW + 5, gY + gH + 5), (0, 0, 255), 2)
+
+    cv2.putText(img, "".join(groupOutput), (gX, gY - 15), cv2.FONT_HERSHEY_SIMPLEX,0.65, (0, 0, 255), 2)
+
+    # print(groupOutput)
+
+cv_show(img)
+
 
